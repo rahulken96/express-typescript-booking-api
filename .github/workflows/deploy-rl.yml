@@ -1,0 +1,90 @@
+name: CI/CD Production Pipeline
+
+# Trigger: Pipeline hanya berjalan jika ada kode yang di-merge/push ke branch master
+on:
+  push:
+    branches: [ "master" ]
+
+jobs:
+  # =========================================================================
+  # JOB 1: AUTOMATED TESTING (CONTINUOUS INTEGRATION)
+  # =========================================================================
+  tested:
+    name: Run Automated Tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Source Code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: 'npm' # Caching node_modules agar eksekusi pipeline cepat
+
+      - name: Install Dependencies
+        run: npm ci # Menginstall versi eksak sesuai package-lock.json (anti desinkronisasi)
+
+      - name: Run Vitest Unit & Integration Tests
+        run: npm run test # Wajib 11/11 test LULUS
+
+  # =========================================================================
+  # JOB 2: BUILD & PUSH DOCKER IMAGE
+  # =========================================================================
+  build-and-push:
+    name: Build & Push Docker Image
+    needs: tested # SYARAT MUTLAK: Hanya jalan jika Job 1 (test) LULUS 100%!
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Build and Push Image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./Dockerfile
+          push: true
+          # Tag ganda: 'latest' untuk rilis terkini, dan 'commit SHA' untuk riwayat audit & rollback
+          tags: |
+            ${{ secrets.DOCKERHUB_USERNAME }}/express-booking-api:latest
+            ${{ secrets.DOCKERHUB_USERNAME }}/express-booking-api:${{ github.sha }}
+
+  # =========================================================================
+  # JOB 3: AUTO DEPLOYMENT KE VPS (CONTINUOUS DEPLOYMENT) [OPTIONAL]
+  # =========================================================================
+  # deploy:
+  #   name: Deploy to Production VPS
+  #   needs: build-and-push # Hanya jalan jika image sudah sukses ter-upload ke Docker Hub
+  #   runs-on: ubuntu-latest
+  #   steps:
+  #     - name: Execute Remote SSH Commands
+  #       uses: appleboy/ssh-action@master
+  #       with:
+  #         host: ${{ secrets.VPS_HOST }}
+  #         username: ${{ secrets.VPS_USER }}
+  #         key: ${{ secrets.VPS_SSH_KEY }}
+  #         script: |
+  #           # 1. Pindah ke direktori project di server VPS
+  #           cd /opt/express-booking-engine-api
+            
+  #           # 2. Unduh image aplikasi versi terbaru dari Docker Hub
+  #           docker compose pull app
+            
+  #           # 3. Reload container app tanpa mematikan database postgres dan redis
+  #           docker compose up -d --no-deps app
+            
+  #           # 4. Jalankan migrasi jika ada pembaruan tabel skema
+  #           docker compose exec app node dist/databases/migrate.js
+            
+  #           # 5. Bersihkan image usang agar harddisk VPS tidak penuh
+  #           docker system prune -f

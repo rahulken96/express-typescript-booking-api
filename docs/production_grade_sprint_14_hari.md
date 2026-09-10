@@ -2695,7 +2695,219 @@ npm run test
 | `GET`  | `/api/v1/booking` | Public/User | Ambil semua booking (Terakselerasi Redis Cache) |
 | `POST` | `/api/v1/booking` | Bearer Token | Buat reservasi booking baru (Anti Double-Booking) |
 | `GET`  | `/check` | Public | Healthcheck status server & Rate Limiter |
+
+---
+
+### Langkah 14.4: Panduan Praktis Menjalankan CI/CD di Lokal WSL (Tanpa Sewa VPS)
+
+> [!NOTE]
+> **Tujuan:** Menjalankan siklus otomatisasi pengujian (CI) dan deployment (CD) langsung ke container Docker di mesin lokal laptop kamu (WSL 2) tanpa perlu menyewa server VPS cloud berbayar.
+
+---
+
+#### 1. Masalah Utama: Mengapa Runner Cloud Tidak Bisa SSH ke WSL?
+
+Perhatikan perbedaan jalur komunikasi jaringan antara VPS Cloud dan laptop WSL:
+
+```text
+[ SKENARIO 1: CLOUD VPS ]
+GitHub Actions Cloud ────(SSH Port 22)───> [ IP Publik VPS: 103.187.x.x ]  ✅ BERHASIL
+(Memiliki rute publik langsung di internet)
+
+[ SKENARIO 2: LAPTOP LOKAL / WSL ]
+GitHub Actions Cloud ────(SSH Port 22)───> [ Router / WiFi ISP ] ───❌ TERHALANG NAT!
+                                                   │
+                                           [ IP Privat WSL ]
+(Tidak ada IP publik, router memblokir semua koneksi masuk dari luar)
 ```
+
+- **Cloud VPS:** Memiliki IP Publik statis sehingga bisa menerima koneksi masuk (*Inbound Connection*) via SSH.
+- **Laptop / WSL:** Berada di balik **NAT (Network Address Translation)** dari router WiFi/ISP dengan IP privat (`192.168.x.x` / `172.x.x.x`), sehingga runner cloud tidak bisa menembus masuk.
+
+---
+
+#### 2. Solusi Resmi: GitHub Actions Self-Hosted Runner di WSL
+
+Alih-alih membiarkan GitHub menembus masuk (*Inbound*), kita membalik arah komunikasinya menggunakan **Self-Hosted Runner** resmi dari GitHub:
+
+```text
+[ LAPTOP LOKAL: WSL 2 ]                                [ GITHUB CLOUD ]
+┌─────────────────────────┐                            ┌──────────────┐
+│  GitHub Runner Daemon   │ ──(Outbound HTTPS 443)───> │ GitHub Repo  │
+│  "Ada job deploy baru?" │ <───────────────────────── │ "Ini job-nya"│
+└────────────┬────────────┘                            └──────────────┘
+             │ Eksekusi Langsung di Laptop:
+             ▼
+┌─────────────────────────┐
+│ docker compose up -d    │ (Container aplikasi otomatis ter-reload!)
+└─────────────────────────┘
+```
+
+> [!TIP]
+> **Mengapa Pendekatan Ini 100% Berhasil?**
+> Runner di dalam WSL yang proaktif menghubungi GitHub melalui port HTTPS standar (443). Tidak perlu IP publik, tidak perlu ubah setting router, tidak butuh SSH, dan 100% gratis.
+
+---
+
+#### 3. Panduan Step-by-Step Menjalankan Self-Hosted Runner di WSL
+
+Berikut 5 langkah praktis untuk mengaktifkannya:
+
+##### 🔹 Step 1: Dapatkan Token Registrasi dari GitHub
+1. Buka browser $\rightarrow$ masuk ke repository project kamu di GitHub.
+2. Klik tab **Settings** (ikon gerigi di atas kanan).
+3. Di menu bilah kiri, klik **Actions** $\rightarrow$ pilih submenu **Runners**.
+4. Klik tombol hijau **New self-hosted runner**.
+5. Pilih:
+   - **Runner image:** `Linux`
+   - **Architecture:** `x64`
+6. Biarkan halaman tersebut terbuka (akan ada token registrasi unik yang berlaku 1 jam).
+
+##### 🔹 Step 2: Download & Ekstrak Runner di Terminal WSL
+Buka terminal WSL kamu (Ubuntu), lalu jalankan perintah berikut:
+
+```bash
+# 1. Buat direktori khusus runner di home user
+mkdir -p ~/actions-runner && cd ~/actions-runner
+
+# 2. Download installer runner resmi dari GitHub (sesuaikan versi)
+curl -o actions-runner-linux-x64.tar.gz -L https://github.com/actions/runner/releases/download/v2.320.0/actions-runner-linux-x64-2.320.0.tar.gz
+
+# 3. Ekstrak file arsip
+tar xzf ./actions-runner-linux-x64.tar.gz
+```
+
+##### 🔹 Step 3: Daftarkan Runner ke Repository Kamu
+Jalankan script konfigurasi dengan token yang didapat pada Step 1:
+
+```bash
+./config.sh --url https://github.com/USERNAME/REPO_NAME --token TOKEN_DARI_GITHUB
+```
+
+> **Saat muncul pertanyaan konfirmasi di terminal:**
+> - *Enter the name of the runner group:* Tekan **Enter** (default).
+> - *Enter the name of runner:* Ketik `wsl-laptop` lalu tekan **Enter**.
+> - *Enter any additional labels:* Tekan **Enter** (default: `self-hosted, Linux, X64`).
+> - *Enter name of work folder:* Tekan **Enter** (default: `_work`).
+
+##### 🔹 Step 4: Nyalakan Runner Daemon
+Untuk mulai mendengarkan tugas dari GitHub, jalankan:
+
+```bash
+./run.sh
+```
+
+**Tampilan Sukses di Terminal WSL:**
+```text
+√ Connected to GitHub
+Current runner version: '2.320.0'
+Listening for Jobs
+```
+
+> [!NOTE]
+> **Menjalankan di Latar Belakang (Background Service):**
+> Jika kamu ingin runner tetap hidup meski jendela terminal WSL ditutup, install sebagai daemon service:
+> ```bash
+> sudo ./svc.sh install
+> sudo ./svc.sh start
+> ```
+
+##### 🔹 Step 5: Sesuaikan File `.github/workflows/deploy.yml`
+Karena runner berjalan langsung di dalam mesin WSL yang memiliki Docker Engine, kita **tidak butuh plugin SSH (`appleboy/ssh-action`)**. Ganti target runner menjadi `runs-on: self-hosted`:
+
+```yaml
+name: CI/CD Pipeline Local WSL
+
+on:
+  push:
+    branches: [ "master" ]
+
+jobs:
+  # =========================================================================
+  # JOB 1: AUTOMATED TESTING (Jalan di Cloud GitHub Runner)
+  # =========================================================================
+  tested:
+    name: Run Automated Tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: 'npm'
+
+      - name: Install Dependencies & Run Tests
+        run: |
+          npm ci
+          npm run test
+
+  # =========================================================================
+  # JOB 2: AUTO DEPLOYMENT LANGSUNG KE WSL (Jalan di Runner Lokal WSL)
+  # =========================================================================
+  deploy-local-wsl:
+    name: Auto Deploy to Local WSL Docker
+    needs: tested
+    runs-on: self-hosted # <-- Menugaskan runner di terminal WSL kamu!
+    steps:
+      - name: Checkout Source Code Terbaru
+        uses: actions/checkout@v4
+
+      - name: Live Reload Container Docker di WSL
+        run: |
+          echo "🚀 Menjalankan deployment otomatis di WSL..."
+          cd /mnt/d/DDoS/Gabut/Back-end/express-booking-engine-api
+          
+          # Rebuild dan jalankan container versi terbaru
+          docker compose up -d --build
+          
+          # Jalankan migrasi database otomatis
+          docker compose exec app node dist/databases/migrate.js
+          
+          echo "✅ Deployment di WSL berhasil 100%!"
+```
+
+**Hasil Uji Coba:**
+Setiap kali kamu menjalankan `git push origin master`:
+1. GitHub Actions menguji kode di cloud (`Job 1: tested`).
+2. Begitu lolos, GitHub mengirim instruksi deploy ke terminal WSL kamu (`Job 2: deploy-local-wsl`).
+3. Container Docker di WSL kamu otomatis ter-build ulang dan aktif di `http://localhost/check` tanpa kamu sentuh!
+
+---
+
+#### 4. Alternatif: Menguji Workflow Secara Offline Menggunakan `act` CLI
+
+Jika kamu ingin menguji apakah sintaks file `.github/workflows/deploy.yml` valid dan seluruh step CI berjalan sukses **tanpa harus melakukan push ke GitHub**:
+
+1. **Install `act` di terminal WSL:**
+   ```bash
+   curl -s https://raw.githubusercontent.com/nektos/act/master/install.sh | sudo bash
+   ```
+2. **Jalankan workflow secara lokal:**
+   ```bash
+   cd /mnt/d/DDoS/Gabut/Back-end/express-booking-engine-api
+
+   # Menjalankan seluruh pipeline:
+   act
+
+   # Atau hanya menjalankan job testing:
+   act -j tested
+   ```
+   `act` akan membuat container Docker lokal untuk mereplikasi server GitHub Actions dan mengeksekusi test tanpa menyentuh internet.
+
+---
+
+#### 5. Ringkasan Perbandingan Opsi Deployment
+
+| Kriteria | Cloud VPS (Production Rill) | Self-Hosted Runner di WSL | Local Testing via `act` |
+|---|---|---|---|
+| **Biaya Server** | Berbayar (Sewa VPS Bulanan) | **100% Gratis** | **100% Gratis** |
+| **Kebutuhan IP Publik** | Wajib (Untuk SSH Inbound) | **Tidak Butuh (Outbound HTTPS)** | **Tidak Butuh (Offline)** |
+| **Akses Publik** | Bisa diakses seluruh dunia | Hanya diakses dari laptop lokal | Hanya diakses dari laptop lokal |
+| **Pemicu (Trigger)** | `git push` ke GitHub | `git push` ke GitHub | Manual command di terminal |
+| **Tujuan Penggunaan** | Rilis aplikasi ke user nyata | Simulasi E2E CI/CD untuk portofolio | Verifikasi file YAML sebelum push |
 
 ---
 

@@ -1,0 +1,49 @@
+name: CI/CD Pipeline Local WSL
+
+on:
+  push:
+    branches: [ "master" ]
+
+jobs:
+  # JOB 1: Test Otomatis (CI di Cloud GitHub)
+  tested:
+    name: Run Automated Tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: 'npm'
+
+      - name: Install Dependencies & Run Tests
+        run: |
+          npm ci
+          npm run test
+
+  # JOB 2: Auto Deploy ke Docker di WSL Laptop (CD di Self-Hosted Runner)
+  deploy-wsl:
+    name: Deploy to Local WSL Docker
+    needs: tested
+    runs-on: self-hosted # Tugas dikirim langsung ke terminal WSL
+    steps:
+      - name: Checkout Source Code
+        uses: actions/checkout@v4
+
+      - name: Live Reload Container di WSL
+        run: |
+          echo "🚀 Menerima instruksi deploy dari GitHub..."
+          cd /mnt/d/DDoS/Gabut/Back-end/express-booking-engine-api
+          
+          # Rebuild dan jalankan container
+          echo "⏳Deployment progress 50%... Docker compose build..."
+          docker compose up -d --build
+          
+          # Jalankan migrasi database
+          echo "⏳Deployment progress 75%... Docker exec migrate..."
+          docker compose exec app node dist/databases/migrate.js
+          
+          echo "✅ Deployment di WSL berhasil 100%!"
