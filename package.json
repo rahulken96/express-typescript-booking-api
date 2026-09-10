@@ -1,0 +1,45 @@
+{
+    "name": "express-booking-engine-api",
+    "version": "1.0.0",
+    "description": "",
+    "main": "index.js",
+    "scripts": {
+        "dev": "tsx watch src/app.ts",
+        "build": "tsc -p tsconfig.build.json",
+        "start": "node dist/app.js",
+        "migrate": "tsx src/databases/migrate.ts",
+        "test": "vitest run",
+        "test:watch": "vitest",
+        "test:coverage": "vitest run --coverage"
+    },
+    "keywords": [],
+    "author": "",
+    "license": "ISC",
+    "type": "commonjs",
+    "dependencies": {
+        "bcrypt": "^6.0.0",
+        "dotenv": "^17.4.2",
+        "express": "^5.2.1",
+        "express-rate-limit": "^8.7.0",
+        "ioredis": "^6.0.0",
+        "jsonwebtoken": "^9.0.3",
+        "pg": "^8.23.0",
+        "rate-limit-redis": "^6.0.1"
+    },
+    "devDependencies": {
+        "@types/bcrypt": "^6.0.0",
+        "@types/express": "^5.0.6",
+        "@types/ioredis": "^4.28.10",
+        "@types/jsonwebtoken": "^9.0.10",
+        "@types/node": "^26.5.0",
+        "@types/pg": "^8.23.1",
+        "@types/supertest": "^7.2.1",
+        "supertest": "^7.2.2",
+        "tsx": "^4.23.13",
+        "typescript": "^7.0.2",
+        "vitest": "^5.0.0"
+    },
+    "optionalDependencies": {
+        "@rolldown/binding-win32-x64-msvc": "^1.2.7"
+    }
+}
