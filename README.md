@@ -46,7 +46,6 @@
 - [9. Konfigurasi Environment Variables](#9-konfigurasi-environment-variables)
 - [10. Panduan Instalasi & Menjalankan Sistem (Quick Start)](#10-panduan-instalasi--menjalankan-sistem-quick-start)
 - [11. Struktur Direktori Proyek](#11-struktur-direktori-proyek)
-- [12. Lisensi](#12-lisensi)
 
 ---
 
@@ -891,9 +890,3 @@ express-booking-engine-api/
 | `src/types/` | Kontrak tipe data TypeScript, DTO input form, dan perluasan tipe native Express (`req.user`). |
 | `src/utils/` | Fungsi pembantu umum independen, seperti fungsi pembungkus Cache-Aside Redis. |
 | `tests/` | Otomasi pengujian software (Unit Testing & Integration Testing) menjamin stabilitas sistem. |
-
----
-
-## 12. Lisensi
-
-Project ini dirilis di bawah lisensi [ISC License](LICENSE). Dibuat untuk tujuan demonstrasi rekayasa perangkat lunak backend standar industri (*Production-Grade Portfolio*).
