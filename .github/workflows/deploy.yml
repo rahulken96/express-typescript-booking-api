@@ -5,10 +5,45 @@ on:
     branches: [ "master" ]
 
 jobs:
-  # JOB 1: Test Otomatis (CI di Cloud GitHub)
+  # =========================================================================
+  # JOB 1: TEST OTOMATIS (CI di Cloud GitHub dengan Service Postgres & Redis)
+  # =========================================================================
   tested:
     name: Run Automated Tests
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_PASSWORD: root
+          POSTGRES_DB: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      DB_HOST: localhost
+      DB_PORT: 5432
+      DB_USER: postgres
+      DB_PASSWORD: root
+      DB_NAME: postgres
+      REDIS_HOST: 127.0.0.1
+      REDIS_PORT: 6379
+      JWT_SECRET: supersecret_access_key
+      JWT_REFRESH_SECRET: supersecret_refresh_key
+      NODE_ENV: dev
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
@@ -17,14 +52,22 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 22
-          cache: 'npm'
 
-      - name: Install Dependencies & Run Tests
+      - name: Install Dependencies
         run: |
-          npm ci
+          npm install
+
+      - name: Run DB Migration
+        run: |
+          npm run migrate
+
+      - name: Run Vitest Unit & Integration Tests
+        run: |
           npm run test
 
-  # JOB 2: Auto Deploy ke Docker di WSL Laptop (CD di Self-Hosted Runner)
+  # =========================================================================
+  # JOB 2: AUTO DEPLOY KE DOCKER DI WSL LAPTOP (CD di Self-Hosted Runner)
+  # =========================================================================
   deploy-wsl:
     name: Deploy to Local WSL Docker
     needs: tested
@@ -39,11 +82,11 @@ jobs:
           cd /mnt/d/DDoS/Gabut/Back-end/express-booking-engine-api
           
           # Rebuild dan jalankan container
-          echo "⏳Deployment progress 50%... Docker compose build..."
+          echo "⏳ Deployment progress 50%... Docker compose build..."
           docker compose up -d --build
           
           # Jalankan migrasi database
-          echo "⏳Deployment progress 75%... Docker exec migrate..."
+          echo "⏳ Deployment progress 75%... Docker exec migrate..."
           docker compose exec app node dist/databases/migrate.js
           
           echo "✅ Deployment di WSL berhasil 100%!"
