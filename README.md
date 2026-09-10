@@ -1,4 +1,4 @@
-# 🎟️ Enterprise Booking Engine REST API
+# 🎟️ Production-Grade Robust Booking Engine REST API
 
 [![Node.js Version](https://img.shields.io/badge/Node.js-v22_LTS-339933?logo=node.js&logoColor=white)](https://nodejs.org/)
 [![TypeScript](https://img.shields.io/badge/TypeScript-v5_Strict-3178C6?logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
